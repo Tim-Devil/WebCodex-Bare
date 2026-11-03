@@ -1,0 +1,21 @@
+# 相对路径以程序所在目录为基准；项目文件夹请先创建。
+server:
+  host: 127.0.0.1
+  port: 8765
+projects:
+  workspace: ./workspace
+jobs:
+  max_concurrent: 4
+  timeout_seconds: 1800
+  max_output_bytes: 8388608
+files:
+  max_bytes: 4194304
+logging:
+  level: INFO
+  max_bytes: 10485760
+  backups: 3
+tunnel:
+  enabled: true
+  health_port: 8766
+  startup_seconds: 45
+reload_seconds: 1

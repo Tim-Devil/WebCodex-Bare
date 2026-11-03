@@ -1,0 +1,11 @@
+.venv/
+.cache/
+.tmp/
+runtime/
+bin/
+workspace/
+projects/
+secrets.yaml
+__pycache__/
+*.py[cod]
+*.egg-info/
