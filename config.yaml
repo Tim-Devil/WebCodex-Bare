@@ -4,6 +4,39 @@ server:
   port: 8765
 projects:
   workspace: ./workspace
+# '*' 表示启动账户可访问的所有目录；[] 表示关闭该类文件访问。
+# 指定目录时可写多行；相对路径以本配置文件所在目录为基准。
+permissions:
+  read: ['*']
+  write: ['*']
+  # 命令继承系统账户权限，可访问范围由操作系统控制。
+  execute: true
+tools:
+  get_status_tool: true
+  list_projects: true
+  list_files: true
+  read_file: true
+  write_file: true
+  replace_text: true
+  search_text: true
+  run_process: true
+  run_python: true
+  git: true
+  read_job: true
+  list_jobs: true
+  cancel_job: true
+mcp:
+  name: WebCodex-Bare
+  title: WebCodex-Bare
+  description: Local files, Git and managed command jobs.
+  instructions: >-
+    Select a configured project. Call get_status_tool to inspect current permissions and enabled tools.
+    File tools enforce permissions.read and permissions.write from config.yaml.
+    Read files before editing and pass the returned SHA-256.
+    run_process/run_python/git return job IDs; observe the same job with read_job.
+    Commands run with the current user's operating-system permissions when permissions.execute is true.
+    Tool failures are explicit; inspect their cause before issuing another side effect.
+    Commands use literal argv. PowerShell is disabled.
 jobs:
   max_concurrent: 4
   timeout_seconds: 1800

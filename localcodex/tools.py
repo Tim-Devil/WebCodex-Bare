@@ -7,14 +7,17 @@ import hashlib
 import logging
 import os
 from pathlib import Path
+import stat
 import threading
 from typing import Any, Literal
 
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.types import ToolAnnotations
 
 from bootstrap import managed_python
 from . import __version__
+from .access import require_path, require_tool, tool_denial
 from .config import resolve_path
 
 log = logging.getLogger(__name__)
@@ -25,9 +28,13 @@ class FileTools:
         self.configuration = configuration
         self.lock = threading.RLock()
 
-    def path(self, project: str, relative: str = ".") -> Path:
-        base = resolve_path(self.configuration.current.projects[project])
-        return resolve_path(relative, base)
+    def path(self, project: str, relative: str = ".", permission: Literal["read", "write"] | None = "read") -> Path:
+        settings = self.configuration.current
+        base = resolve_path(settings.projects[project])
+        target = resolve_path(relative, base)
+        if permission is not None:
+            require_path(settings, permission, target)
+        return target
 
     def read(self, project: str, path: str) -> bytes:
         target = self.path(project, path)
@@ -43,7 +50,7 @@ class FileTools:
         if len(data) > self.configuration.current.files.max_bytes:
             raise ValueError("Content exceeds files.max_bytes")
         with self.lock:
-            target = self.path(project, path)
+            target = self.path(project, path, permission="write")
             previous_mode = None
             if target.exists():
                 if not expected_sha256:
@@ -57,7 +64,7 @@ class FileTools:
             elif expected_sha256 is not None:
                 raise ValueError("Expected an existing file, but the target is absent")
             target.parent.mkdir(parents=True, exist_ok=True)
-            target = self.path(project, path)
+            target = self.path(project, path, permission="write")
             with tempfile.NamedTemporaryFile(dir=target.parent, prefix=".localcodex-", delete=False) as stream:
                 temporary = Path(stream.name)
                 stream.write(data)
@@ -66,8 +73,20 @@ class FileTools:
             if previous_mode is not None:
                 temporary.chmod(previous_mode)
             temporary.replace(target)
-            log.info("file_written project=%s path=%s bytes=%s", project, path, len(data))
+            log.info("file_written project=%s path=%r bytes=%s", project, str(target), len(data))
             return {"path": path, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+
+
+class ConfiguredMCPServer(MCPServer):
+    def __init__(self, configuration):
+        self.configuration = configuration
+        options = configuration.current.mcp
+        super().__init__(options.name, title=options.title, description=options.description,
+                         version=__version__, instructions=options.instructions)
+
+    async def list_tools(self):
+        settings = self.configuration.current
+        return [tool for tool in await super().list_tools() if tool_denial(settings, tool.name) is None]
 
 
 def create_mcp(configuration, jobs, get_status):
@@ -75,51 +94,59 @@ def create_mcp(configuration, jobs, get_status):
     import inspect
     import time
 
-    mcp = MCPServer("WebCodex-Bare", version=__version__, instructions=
-                    "Select a configured project. Read files before editing and pass the returned SHA-256. "
-                    "run_process/run_python/git return job IDs; observe the same job with read_job. "
-                    "Tool failures are explicit; inspect their cause before issuing another side effect. "
-                    "Commands use literal argv and the current user's permissions. PowerShell is disabled.")
+    mcp = ConfiguredMCPServer(configuration)
     files = FileTools(configuration)
 
-    def tool(function):
-        @functools.wraps(function)
-        def checked(*args, **kwargs):
-            started = time.monotonic()
-            log.info("tool_started name=%s", function.__name__)
-            try:
-                result = function(*args, **kwargs)
-                log.info("tool_finished name=%s elapsed_ms=%.1f", function.__name__, (time.monotonic() - started) * 1000)
-                return result
-            except Exception as error:
-                log.exception("tool_failed name=%s", function.__name__)
-                raise ToolError(f"{type(error).__name__}: {error}") from error
-        checked.__signature__ = inspect.signature(function, eval_str=True)
-        mcp.tool(structured_output=True)(checked)
-        return checked
+    def tool(*, read_only: bool, idempotent: bool = False, open_world: bool = False):
+        def register(function):
+            signature = inspect.signature(function, eval_str=True)
 
-    @tool
+            @functools.wraps(function)
+            def checked(*args, **kwargs):
+                started = time.monotonic()
+                revision = configuration.revision
+                targets = {key: value for key, value in signature.bind(*args, **kwargs).arguments.items()
+                           if key in {"project", "path", "cwd", "job_id"}}
+                log.info("tool_started name=%s revision=%s targets=%r", function.__name__, revision, targets)
+                try:
+                    require_tool(configuration.current, function.__name__)
+                    result = function(*args, **kwargs)
+                    log.info("tool_finished name=%s revision=%s elapsed_ms=%.1f", function.__name__, revision,
+                             (time.monotonic() - started) * 1000)
+                    return result
+                except Exception as error:
+                    log.exception("tool_failed name=%s revision=%s targets=%r", function.__name__, revision, targets)
+                    raise ToolError(f"{type(error).__name__}: {error}") from error
+
+            checked.__signature__ = signature
+            mcp.tool(structured_output=True, annotations=ToolAnnotations(
+                read_only_hint=read_only, destructive_hint=not read_only,
+                idempotent_hint=read_only or idempotent, open_world_hint=open_world))(checked)
+            return checked
+        return register
+
+    @tool(read_only=True)
     def get_status_tool() -> dict[str, Any]:
-        """Read service readiness, configuration revision and active job count."""
+        """Read service readiness, configuration revision, effective access rules and enabled tools."""
         return get_status()
 
-    @tool
+    @tool(read_only=True)
     def list_projects() -> dict[str, Any]:
         """List project names and resolved absolute working directories from config.yaml."""
         return {"projects": configuration.current.projects, "config_revision": configuration.revision}
 
-    @tool
+    @tool(read_only=True)
     def list_files(project: str, path: str = ".", limit: int = 200) -> dict[str, Any]:
         """List one directory using an absolute path or a path relative to the selected project. limit: 1..1000."""
         if not 1 <= limit <= 1000:
             raise ValueError("limit must be in 1..1000")
         directory = files.path(project, path)
         entries = sorted(directory.iterdir(), key=lambda p: p.name.casefold())
-        rows = [{"name": p.name, "directory": p.is_dir(), "symlink": p.is_symlink(),
+        rows = [{"name": p.name, "directory": stat.S_ISDIR(p.lstat().st_mode), "symlink": p.is_symlink(),
                  "bytes": p.lstat().st_size} for p in entries[:limit]]
         return {"entries": rows, "total": len(entries), "truncated": len(entries) > limit}
 
-    @tool
+    @tool(read_only=True)
     def read_file(project: str, path: str, encoding: Literal["utf-8", "base64"] = "utf-8",
                   offset: int = 0, limit: int = 65536) -> dict[str, Any]:
         """Read a byte range and the full-file SHA-256. limit: 1..262144. Continue at next_offset. Use base64 for binary files or UTF-8 byte boundaries."""
@@ -143,14 +170,14 @@ def create_mcp(configuration, jobs, get_status):
                 "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(),
                 "next_offset": offset + len(chunk), "complete": offset + len(chunk) >= len(data)}
 
-    @tool
+    @tool(read_only=False)
     def write_file(project: str, path: str, content: str, expected_sha256: str | None = None,
                    encoding: Literal["utf-8", "base64"] = "utf-8") -> dict[str, Any]:
         """Create or replace one bounded file. Existing files require the last read_file SHA-256; new files use null."""
         data = content.encode("utf-8") if encoding == "utf-8" else base64.b64decode(content, validate=True)
         return files.write(project, path, data, expected_sha256)
 
-    @tool
+    @tool(read_only=False)
     def replace_text(project: str, path: str, old: str, new: str, expected_sha256: str) -> dict[str, Any]:
         """Replace exactly one occurrence of old text, guarded by the full-file SHA-256 from read_file."""
         if not old:
@@ -162,19 +189,20 @@ def create_mcp(configuration, jobs, get_status):
                 raise ValueError(f"Expected one occurrence, found {count}")
             return files.write(project, path, content.replace(old, new, 1).encode("utf-8"), expected_sha256)
 
-    @tool
+    @tool(read_only=True)
     def search_text(project: str, text: str, path: str = ".", file_glob: str = "*", limit: int = 100) -> dict[str, Any]:
         """Search literal UTF-8 text in project files. Skips symlinks, binary/oversized files and generated directories. Reports scan limits."""
         if not text or not 1 <= limit <= 1000:
             raise ValueError("text must be nonempty; limit must be in 1..1000")
-        base = files.path(project)
+        base = files.path(project, permission=None)
         directory = files.path(project, path)
         if not directory.is_dir():
             raise NotADirectoryError(f"Search directory is missing or is not a directory: {directory}")
         matches, skipped, scanned = [], 0, 0
         excluded = {".git", ".cache", ".tmp", ".venv", "__pycache__", "node_modules", "runtime", "bin"}
         for current, directories, names in os.walk(directory, followlinks=False):
-            directories[:] = sorted(d for d in directories if d not in excluded and not (Path(current) / d).is_symlink())
+            directories[:] = sorted(d for d in directories if d not in excluded
+                                    and not (Path(current) / d).is_symlink() and not (Path(current) / d).is_junction())
             for name in sorted(names):
                 target = Path(current) / name
                 if not fnmatch.fnmatch(name, file_glob) or target.is_symlink():
@@ -199,28 +227,28 @@ def create_mcp(configuration, jobs, get_status):
                             return {"matches": matches, "truncated": True, "skipped_files": skipped}
         return {"matches": matches, "truncated": False, "skipped_files": skipped, "scanned_files": scanned}
 
-    @tool
+    @tool(read_only=False, open_world=True)
     def run_process(project: str, argv: list[str], cwd: str = ".", timeout_seconds: int | None = None,
                     stdin: str | None = None) -> dict[str, Any]:
         """Start one background process using literal argv, without shell parsing. Returns a job ID. Poll read_job; use cancel_job to stop its process tree."""
-        return jobs.start(project, files.path(project, cwd), argv, timeout_seconds, stdin)
+        return jobs.start(project, files.path(project, cwd, permission=None), argv, timeout_seconds, stdin)
 
-    @tool
+    @tool(read_only=False, open_world=True)
     def run_python(project: str, code: str, cwd: str = ".", timeout_seconds: int | None = None) -> dict[str, Any]:
         """Execute Python code in the local .venv as a background job. Code is passed on stdin."""
-        return jobs.start(project, files.path(project, cwd), [str(managed_python()), "-B", "-"], timeout_seconds, code)
+        return jobs.start(project, files.path(project, cwd, permission=None), [str(managed_python()), "-B", "-"], timeout_seconds, code)
 
-    @tool
+    @tool(read_only=False, open_world=True)
     def git(project: str, args: list[str], timeout_seconds: int | None = None) -> dict[str, Any]:
         """Run explicit Git arguments in a project as a background job; returns a job ID. All Git side effects follow the supplied arguments."""
-        return jobs.start(project, files.path(project), ["git", *args], timeout_seconds)
+        return jobs.start(project, files.path(project, permission=None), ["git", *args], timeout_seconds)
 
-    @tool
+    @tool(read_only=True)
     def read_job(job_id: str, offset: int = 0, limit: int = 32768) -> dict[str, Any]:
         """Read one job status and a bounded output chunk. Continue at next_offset. Terminal statuses: succeeded, failed, timed_out, cancelled, interrupted."""
         return jobs.read(job_id, offset, limit)
 
-    @tool
+    @tool(read_only=True)
     def list_jobs(limit: int = 50) -> dict[str, Any]:
         """List newest job records, including failures. limit: 1..200."""
         if not 1 <= limit <= 200:
@@ -229,7 +257,7 @@ def create_mcp(configuration, jobs, get_status):
             values = sorted(jobs.jobs.values(), key=lambda job: job["created_at"], reverse=True)
             return {"jobs": [dict(value) for value in values[:limit]], "total": len(values)}
 
-    @tool
+    @tool(read_only=False, idempotent=True)
     def cancel_job(job_id: str) -> dict[str, Any]:
         """Request cancellation of one owned job and its descendants; observe read_job until terminal."""
         return jobs.cancel(job_id)

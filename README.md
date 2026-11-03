@@ -102,7 +102,46 @@ projects:
 
 文件夹应先创建。绝对路径直接使用，相对路径以 `config.yaml` 所在目录为基准，也支持 `~` 表示当前用户目录。Linux 的绝对路径例如 `/home/user/code/demo`。保存后默认一秒内加载，调用 `list_projects` 可查看各工作区解析后的绝对路径。
 
-工具中的相对路径以所选工作区为基准；绝对路径直接使用，`..` 按实际路径解析。文件读写和命令使用当前账户的系统权限，工作区用于定位项目和设置默认工作目录。`run_python` 使用本项目的 `.venv`。
+工具中的相对路径以所选工作区为基准；绝对路径直接使用，`..` 按实际路径解析。工作区用于定位项目和设置默认工作目录，文件访问规则由下面的 `permissions` 配置控制。`run_python` 使用本项目的 `.venv`。
+
+### 工具与权限
+
+默认配置保持本机账户的完整访问能力：
+
+```yaml
+permissions:
+  read: ['*']
+  write: ['*']
+  execute: true
+```
+
+`read` 控制文件浏览、读取与搜索，`write` 控制创建和编辑文件。`['*']` 表示当前账户可访问的所有目录，`[]` 表示关闭该类访问。指定目录时每行写一个路径，该目录及其子目录允许访问；绝对路径、相对路径和 `~` 的解析规则与工作区配置相同。程序根据解析后的实际路径检查权限，包括符号链接和 Windows 目录联接的目标。授权目录可独立于 `projects` 配置。
+
+例如，允许读取两个目录，只在第一个目录中编辑，并关闭命令执行：
+
+```yaml
+permissions:
+  read:
+    - 'D:/code/demo'
+    - '../notes'
+  write:
+    - 'D:/code/demo'
+  execute: false
+```
+
+纯只读使用时，将 `write` 设为 `[]`，`execute` 设为 `false`。编辑已有文件需要该文件的读取权限，以及最近读取返回的 SHA-256。
+
+`execute` 控制 `run_process`、`run_python` 和 `git`。允许执行的命令继承启动账户的系统权限，可以操作该账户可访问的文件、网络和程序。`read`、`write` 的目录规则作用于文件工具；命令的访问范围由操作系统控制。需要把命令也限制在指定目录内时，应使用专门的低权限账户或操作系统隔离环境。
+
+`tools` 列出所有工具的独立开关，例如 `read_file: true`、`git: false`。有效工具列表同时遵循开关和 `permissions`：关闭命令执行后，三个执行工具会从列表移除；文件读取或写入列表为空时，对应文件工具会移除。客户端按缓存的旧工具列表调用时，服务端仍会检查当前配置并明确报错。`cancel_job` 可继续用于取消已有任务，其开关单独控制。
+
+`read_job`、`list_jobs` 控制任务记录与输出的访问。任务记录可能包含之前命令读取的数据；配置文件工具的目录规则时，请同时考虑这两个开关。`get_status_tool` 返回当前权限、有效工具列表和配置版本。操作日志记录工具名、目标路径、配置版本及失败原因。
+
+工具的只读、破坏性、幂等性和外部访问声明由实际实现生成，帮助客户端选择工具和显示确认提示。服务端执行每次调用的工具与路径权限检查。
+
+`mcp` 中的 `name`、`title`、`description`、`instructions` 分别配置服务名称、显示标题、描述与模型使用指引，修改后重新启动。修改工具开关后，ChatGPT 可能需要在应用设置中点击 `Refresh`，再开始新对话。
+
+从旧版本升级时，请先停止服务，将新版 `config.yaml` 中的 `permissions`、`tools`、`mcp` 三节加入现有配置，保留自己的工作区和其他设置，再重新启动。
 
 ### 配置和热加载
 
@@ -110,14 +149,16 @@ projects:
 
 | 修改内容 | 生效方式 |
 | --- | --- |
-| `projects`、`files` | 校验通过后，后续工具调用使用新配置 |
+| `projects`、`files`、`permissions`、`tools` | 校验通过后，后续工具调用使用新配置 |
 | `jobs` | 新任务使用新限制，已有任务沿用启动时的限制 |
 | `logging.level`、`reload_seconds` | 校验通过后生效 |
-| `server`、`tunnel`、日志轮转大小与数量 | 服务报错并停止，重新启动后应用新配置            |
+| `server`、`tunnel`、`mcp`、日志轮转大小与数量 | 服务报错并停止，重新启动后应用新配置 |
 | `secrets.yaml` | 服务停止，重新启动后使用新凭证 |
 | `requirements.txt` | 服务停止，执行 `python install.py` 后重新启动 |
 
 YAML 格式错误、重复字段、未知字段和无效参数会明确报错。热加载失败时服务停止，错误原因写入日志。修改依赖前请先停止服务。
+
+权限和开关变更作用于后续调用，已有任务继续运行。需要结束已有任务时，调用 `cancel_job` 或停止服务。
 
 ### 工具
 
@@ -265,7 +306,46 @@ projects:
 
 Create the directories first. Absolute paths are used directly; relative paths are resolved against the directory containing `config.yaml`. `~` expands to the current user's home directory. A Linux absolute path can look like `/home/user/code/demo`. Changes load within one second by default; call `list_projects` to see the resolved absolute workspace paths.
 
-Tool paths can be absolute or relative to the selected workspace, and `..` is resolved normally. File operations and commands use your account's operating-system permissions. Workspaces identify projects and provide default working directories. `run_python` uses this project's `.venv`.
+Tool paths can be absolute or relative to the selected workspace, and `..` is resolved normally. Workspaces identify projects and provide default working directories. The `permissions` settings below control file access. `run_python` uses this project's `.venv`.
+
+### Tools and permissions
+
+The default configuration preserves full access under the current operating-system account:
+
+```yaml
+permissions:
+  read: ['*']
+  write: ['*']
+  execute: true
+```
+
+`read` controls file listing, reading, and searching. `write` controls file creation and editing. `['*']` allows all directories accessible to the account; `[]` disables that category of file access. To allow specific directories and their descendants, put one path per entry. Absolute paths, relative paths, and `~` follow the workspace configuration's resolution rules. Access checks use resolved paths, including targets of symlinks and Windows junctions. Permission directories can be configured independently of `projects`.
+
+For example, allow reading two directories, editing in the first, and disable command execution:
+
+```yaml
+permissions:
+  read:
+    - 'D:/code/demo'
+    - '../notes'
+  write:
+    - 'D:/code/demo'
+  execute: false
+```
+
+For read-only use, set `write: []` and `execute: false`. Editing an existing file requires read access to that file and its latest SHA-256.
+
+`execute` controls `run_process`, `run_python`, and `git`. Enabled commands inherit the service account's operating-system permissions and can access its files, network, and programs. The `read` and `write` directory rules apply to file tools; command access is governed by the operating system. To confine commands to particular directories, use a dedicated restricted account or an operating-system isolation environment.
+
+`tools` lists an independent switch for every tool, such as `read_file: true` or `git: false`. The effective tool list follows both the switches and `permissions`: disabling execution removes all three execution tools; an empty read or write list removes the corresponding file tools. Calls made from a client's cached tool list still undergo current server-side checks and return explicit errors when denied. `cancel_job` remains available to cancel existing jobs, subject to its own switch.
+
+`read_job` and `list_jobs` control access to job records and output. Those records can contain data read by earlier commands; consider these switches when restricting file tools. `get_status_tool` returns the current permissions, effective tools, and configuration revision. Operation logs record tool names, target paths, configuration revisions, and failure causes.
+
+Read-only, destructive, idempotent, and open-world annotations are generated from actual tool behavior to help clients choose tools and present confirmations. The server enforces tool and path access checks on each call.
+
+The `mcp` fields `name`, `title`, `description`, and `instructions` configure the service name, display title, description, and model instructions. Restart after changing them. After changing tool switches, ChatGPT may need `Refresh` in the app settings followed by a new conversation.
+
+When upgrading from an earlier version, stop the service, add the `permissions`, `tools`, and `mcp` sections from the new `config.yaml` to your configuration, preserve your workspaces and other settings, and start again.
 
 ### Configuration and hot reload
 
@@ -273,14 +353,16 @@ Runtime settings live in `config.yaml`, tunnel credentials in `secrets.yaml`, an
 
 | Change | Behavior |
 | --- | --- |
-| `projects`, `files` | Subsequent tool calls use the validated settings |
+| `projects`, `files`, `permissions`, `tools` | Subsequent tool calls use the validated settings |
 | `jobs` | New jobs use the new limits; running jobs keep their original limits |
 | `logging.level`, `reload_seconds` | Applied after validation |
-| `server`, `tunnel`, log rotation size or count | The service reports the change and stops; start it again to apply it |
+| `server`, `tunnel`, `mcp`, log rotation size or count | The service reports the change and stops; start it again to apply it |
 | `secrets.yaml` | The service stops; start it again to use the new credentials |
 | `requirements.txt` | The service stops; run `python install.py`, then start it again |
 
 Malformed YAML, duplicate keys, unknown fields, and invalid values produce explicit errors. A failed reload stops the service and logs the cause. Stop the service before changing dependencies.
+
+Permission and tool-switch changes apply to subsequent calls. Existing jobs keep running; use `cancel_job` or stop the service to end them.
 
 ### Tools
 

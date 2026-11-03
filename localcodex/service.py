@@ -21,6 +21,7 @@ from starlette.routing import Route
 import uvicorn
 
 from bootstrap import ROOT, exclusive_lock, local_environment
+from .access import tool_denial
 from .config import Configuration, atomic_yaml, load_secrets
 from .jobs import ACTIVE, JobManager
 from .processes import ProcessTree
@@ -84,9 +85,12 @@ class Service:
     def status(self):
         with self.jobs.lock:
             active = sum(record["status"] in ACTIVE for record in self.jobs.jobs.values())
+        settings = self.configuration.current
+        enabled_tools = [name for name in type(settings.tools).model_fields if tool_denial(settings, name) is None]
         return {"instance": self.state["instance"], "pid": os.getpid(), "status": self.state["status"],
                 "config_revision": self.configuration.revision, "active_jobs": active,
                 "tunnel_enabled": self.configuration.current.tunnel.enabled,
+                "permissions": settings.permissions.model_dump(), "enabled_tools": enabled_tools,
                 "error": self.failure}
 
     async def health(self, request):

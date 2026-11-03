@@ -59,9 +59,41 @@ class Tunnel(Model):
     startup_seconds: int = Field(ge=5, le=120)
 
 
+class Permissions(Model):
+    read: list[str]
+    write: list[str]
+    execute: bool
+
+
+class Tools(Model):
+    get_status_tool: bool
+    list_projects: bool
+    list_files: bool
+    read_file: bool
+    write_file: bool
+    replace_text: bool
+    search_text: bool
+    run_process: bool
+    run_python: bool
+    git: bool
+    read_job: bool
+    list_jobs: bool
+    cancel_job: bool
+
+
+class MCP(Model):
+    name: str = Field(min_length=1, max_length=80)
+    title: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=1, max_length=1024)
+    instructions: str = Field(min_length=1, max_length=8192)
+
+
 class Settings(Model):
     server: Server
     projects: dict[str, str] = Field(min_length=1)
+    permissions: Permissions
+    tools: Tools
+    mcp: MCP
     jobs: Jobs
     files: Files
     logging: Logging
@@ -95,9 +127,27 @@ def load_settings(path: Path = ROOT / "config.yaml") -> Settings:
         if not resolved.is_dir():
             raise ValueError(f"Project {name!r} directory is missing: {resolved}")
         projects[name] = str(resolved)
+    permissions = {}
+    for operation in ("read", "write"):
+        roots = getattr(settings.permissions, operation)
+        if "*" in roots:
+            if roots != ["*"]:
+                raise ValueError(f"permissions.{operation}: '*' must be the only entry")
+            permissions[operation] = roots
+            continue
+        normalized = []
+        for value in roots:
+            if not value.strip() or any(character in value for character in ("*", "?", "\x00")):
+                raise ValueError(f"permissions.{operation}: use literal directory paths, or ['*'], or []")
+            resolved = resolve_path(value, path.resolve().parent)
+            if not resolved.is_dir():
+                raise ValueError(f"permissions.{operation} directory is missing: {resolved}")
+            normalized.append(str(resolved))
+        permissions[operation] = normalized
     if settings.server.port == settings.tunnel.health_port:
         raise ValueError("server.port and tunnel.health_port must differ")
-    return settings.model_copy(update={"projects": projects})
+    return settings.model_copy(update={"projects": projects,
+                                      "permissions": settings.permissions.model_copy(update=permissions)})
 
 
 def load_secrets() -> Secrets:
@@ -141,6 +191,8 @@ class Configuration:
         if signature == self.signature:
             return False
         candidate = load_settings(self.directory / "config.yaml")
+        if candidate.mcp != self.current.mcp:
+            raise RuntimeError("mcp metadata changed: service stopped; start again to apply it")
         if candidate.server != self.current.server or candidate.tunnel != self.current.tunnel:
             raise RuntimeError("server/tunnel configuration changed: service stopped; start again to apply it")
         if candidate.logging.max_bytes != self.current.logging.max_bytes or candidate.logging.backups != self.current.logging.backups:
