@@ -57,6 +57,8 @@ tunnel_id: tunnel_你的隧道ID
 tunnel_api_key: 你的API密钥
 ```
 
+凭证以明文保存在本机的 `secrets.yaml` 中。本工具默认你的机器和账户环境是安全的。机器存在安全风险时，请谨慎使用。
+
 ### 启动、连接、停止
 
 Windows 双击 `start.pyw`。启动程序会等待本地服务和隧道就绪，成功后退出。重复点击会检查并复用正在运行的实例。启动失败会弹窗，具体原因写入 `runtime/`。
@@ -136,6 +138,12 @@ YAML 格式错误、重复字段、未知字段和无效参数会明确报错。
 
 这些运行目录以及 `secrets.yaml` 已加入 `.gitignore`。仓库只提供凭证示例。
 
+### 常见问题
+
+#### Q1：程序已经启动，ChatGPT 也连接了，为什么工具调用仍然失败？
+
+ChatGPT 可能缓存了旧的工具定义，更新程序后仍按旧列表调用工具。请在应用设置中点击 `Refresh`，刷新工具列表，再新建对话、选择该应用，并调用 `list_projects` 验证。
+
 ### 许可与第三方组件
 
 本项目独立实现了 Python 服务、配置、启停和任务管理；隧道组件来自 [OpenAI 官方 tunnel-client](https://github.com/openai/tunnel-client)，固定使用 `v0.0.19`。
@@ -198,6 +206,8 @@ Put the tunnel ID and runtime API key in `secrets.yaml`:
 tunnel_id: tunnel_YOUR_TUNNEL_ID
 tunnel_api_key: YOUR_API_KEY
 ```
+
+Credentials are stored in plain text in `secrets.yaml` on your machine. This tool assumes your machine and user account are secure. Use it with caution if your machine may be compromised.
 
 ### Start, connect, and stop
 
@@ -277,6 +287,12 @@ Command tools accept argument arrays and return a job ID. Use `read_job` to chec
 | `workspace/`, `projects/` | Local workspaces |
 
 These runtime directories and `secrets.yaml` are covered by `.gitignore`. The repository includes example credentials only.
+
+### FAQ
+
+#### Q1: The program is running and ChatGPT is connected. Why do tool calls still fail?
+
+ChatGPT may have cached the old tool definitions and may still use them after an update. Open the app settings and click `Refresh`, then start a new conversation, select the app, and call `list_projects` to verify the connection.
 
 ### License and third-party components
 
