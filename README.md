@@ -42,7 +42,7 @@ chmod +x start stop
 
 Windows 已完成实际验证。Linux 提供了启动脚本、文件锁和进程组处理，实际运行仍待验证。支持的 CPU 架构为 x86_64 和 ARM64；本机验证使用 Windows x86_64。
 
-### 获取隧道 ID 和 API key
+### 获取隧道 ID 和 API key（首次配置）
 
 1. 登录 [OpenAI Platform 隧道设置](https://platform.openai.com/settings/organization/tunnels)，选择要使用的组织，创建隧道，复制完整的 `tunnel_...` ID。
 2. 在隧道设置中关联准备用来连接的 ChatGPT 工作区。
@@ -59,13 +59,23 @@ tunnel_api_key: 你的API密钥
 
 凭证以明文保存在本机的 `secrets.yaml` 中。本工具默认你的机器和账户环境是安全的。机器存在安全风险时，请谨慎使用。
 
-### 启动、连接、停止
+#### 首次连接 ChatGPT
 
-Windows 双击 `start.pyw`。启动程序会等待本地服务和隧道就绪，成功后退出。重复点击会检查并复用正在运行的实例。启动失败会弹窗，具体原因写入 `runtime/`。
+保存凭证后，先启动程序：Windows 双击 `start.pyw`，Linux 执行 `./start`，等待本地服务和隧道就绪。
 
 在 [ChatGPT Plugins](https://chatgpt.com/plugins) 中选择 `Add custom MCP server`，连接方式选 `Tunnel`，填写 `secrets.yaml` 中的隧道 ID，认证选 `No authentication`。本地隧道客户端会为服务注入运行令牌。连接后调用 `list_projects`，应能看到配置中的项目。添加权限由账户和工作区设置控制，入口说明见 [OpenAI 官方连接指南](https://developers.openai.com/plugins/deploy/connect-chatgpt)。
 
+ChatGPT 会保留添加好的应用连接，后续日常使用时复用该连接。
+
 升级后若工具列表仍显示旧内容，在应用设置里刷新工具列表，再开始新对话。
+
+本地 MCP 地址默认是 `http://127.0.0.1:8765/mcp`，采用 Bearer 认证。直接连接本地服务时，令牌取自 `runtime/instance.yaml`，每次启动重新生成。
+
+### 日常启动与停止
+
+Windows 双击 `start.pyw`。启动程序会等待本地服务和隧道就绪，成功后退出。重复点击会检查并复用正在运行的实例。启动失败会弹窗，具体原因写入 `runtime/`。
+
+服务就绪后，在 ChatGPT 对话中选择已经添加的应用，即可调用工具。
 
 用完双击 `stop.pyw`。停止程序会等待服务退出，并结束服务管理的任务、子进程和隧道连接。项目文件和日志会保留。
 
@@ -78,8 +88,6 @@ python bootstrap.py status
 python bootstrap.py start
 python bootstrap.py stop
 ```
-
-本地 MCP 地址默认是 `http://127.0.0.1:8765/mcp`，采用 Bearer 认证。直接连接本地服务时，令牌取自 `runtime/instance.yaml`，每次启动重新生成。
 
 ### 添加工作区
 
@@ -196,7 +204,7 @@ chmod +x start stop
 
 Windows has been tested on a real machine. Linux has launch scripts, file locking, and process-group handling; testing on a Linux machine is still pending. The installer supports x86_64 and ARM64. Local testing used Windows x86_64.
 
-### Get a tunnel ID and API key
+### Get a tunnel ID and API key (first-time setup)
 
 1. Sign in to [OpenAI Platform tunnel settings](https://platform.openai.com/settings/organization/tunnels), select your organization, create a tunnel, and copy its full `tunnel_...` ID.
 2. Associate the tunnel with the ChatGPT workspace you plan to use.
@@ -213,13 +221,23 @@ tunnel_api_key: YOUR_API_KEY
 
 Credentials are stored in plain text in `secrets.yaml` on your machine. This tool assumes your machine and user account are secure. Use it with caution if your machine may be compromised.
 
-### Start, connect, and stop
+#### Connect to ChatGPT for the first time
 
-On Windows, double-click `start.pyw`. The launcher waits for the local service and tunnel to become ready, then exits. Starting it again checks and reuses the running instance. Startup failures appear in a dialog, with details under `runtime/`.
+After saving your credentials, start the program by double-clicking `start.pyw` on Windows or running `./start` on Linux. Wait for the local service and tunnel to become ready.
 
 In [ChatGPT Plugins](https://chatgpt.com/plugins), choose `Add custom MCP server`, select `Tunnel` as the connection type, enter the tunnel ID from `secrets.yaml`, and choose `No authentication`. The local tunnel client injects the service's runtime token. After connecting, call `list_projects` to check the configured projects. Access to custom MCP servers depends on your account and workspace settings; see the [official OpenAI connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt).
 
+ChatGPT keeps the app connection you added. Reuse that connection for day-to-day use.
+
 If an upgrade leaves the old tool list visible, refresh the tools in the app settings and start a new conversation.
+
+The local MCP endpoint defaults to `http://127.0.0.1:8765/mcp` and uses Bearer authentication. A client connecting directly to this endpoint needs the token from `runtime/instance.yaml`. A new token is generated on each start.
+
+### Day-to-day start and stop
+
+On Windows, double-click `start.pyw`. The launcher waits for the local service and tunnel to become ready, then exits. Starting it again checks and reuses the running instance. Startup failures appear in a dialog, with details under `runtime/`.
+
+Once the service is ready, select the app you already added in your ChatGPT conversation to use its tools.
 
 When you're done, double-click `stop.pyw`. It waits for the service to exit and ends its managed jobs, child processes, and tunnel connection. Project files and logs are kept.
 
@@ -232,8 +250,6 @@ python bootstrap.py status
 python bootstrap.py start
 python bootstrap.py stop
 ```
-
-The local MCP endpoint defaults to `http://127.0.0.1:8765/mcp` and uses Bearer authentication. A client connecting directly to this endpoint needs the token from `runtime/instance.yaml`. A new token is generated on each start.
 
 ### Add a workspace
 
