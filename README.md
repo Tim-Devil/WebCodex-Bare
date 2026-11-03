@@ -91,17 +91,18 @@ python bootstrap.py stop
 
 ### 添加工作区
 
-把项目放进程序目录内，例如创建 `projects/demo/`，然后修改 `config.yaml`：
+在 `config.yaml` 的 `projects` 中，每行配置一个工作区。工作区可以位于本机任意位置：
 
 ```yaml
 projects:
   workspace: ./workspace
-  demo: ./projects/demo
+  demo: 'D:/code/demo'
+  notes: '../notes'
 ```
 
-文件夹应先创建，路径相对于程序目录。保存后默认一秒内加载，调用 `list_projects` 就能看到 `demo`。
+文件夹应先创建。绝对路径直接使用，相对路径以 `config.yaml` 所在目录为基准，也支持 `~` 表示当前用户目录。Linux 的绝对路径例如 `/home/user/code/demo`。保存后默认一秒内加载，调用 `list_projects` 可查看各工作区解析后的绝对路径。
 
-文件工具会校验项目路径。命令使用当前账户的权限执行，以所选项目作为工作目录。`run_python` 使用本项目的 `.venv`。
+工具中的相对路径以所选工作区为基准；绝对路径直接使用，`..` 按实际路径解析。文件读写和命令使用当前账户的系统权限，工作区用于定位项目和设置默认工作目录。`run_python` 使用本项目的 `.venv`。
 
 ### 配置和热加载
 
@@ -253,17 +254,18 @@ python bootstrap.py stop
 
 ### Add a workspace
 
-Place the project inside the application directory, for example at `projects/demo/`, then edit `config.yaml`:
+Add one workspace per entry under `projects` in `config.yaml`. Workspaces can be anywhere on your machine:
 
 ```yaml
 projects:
   workspace: ./workspace
-  demo: ./projects/demo
+  demo: 'D:/code/demo'
+  notes: '../notes'
 ```
 
-Create the directory first. Paths are relative to the application directory. Changes load within one second by default; call `list_projects` to see `demo`.
+Create the directories first. Absolute paths are used directly; relative paths are resolved against the directory containing `config.yaml`. `~` expands to the current user's home directory. A Linux absolute path can look like `/home/user/code/demo`. Changes load within one second by default; call `list_projects` to see the resolved absolute workspace paths.
 
-File tools validate project paths. Commands run with your account's permissions and use the selected project as their working directory. `run_python` uses this project's `.venv`.
+Tool paths can be absolute or relative to the selected workspace, and `..` is resolved normally. File operations and commands use your account's operating-system permissions. Workspaces identify projects and provide default working directories. `run_python` uses this project's `.venv`.
 
 ### Configuration and hot reload
 

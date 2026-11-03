@@ -81,24 +81,23 @@ def read_yaml(path: Path):
         raise ValueError(f"Invalid YAML in {path.name}: {error}") from error
 
 
-def confined(path: str | Path, base: Path = ROOT) -> Path:
-    resolved = (base / path).resolve()
-    if not resolved.is_relative_to(ROOT):
-        raise ValueError(f"Path escapes the application directory: {path}")
-    return resolved
+def resolve_path(path: str | Path, base: Path = ROOT) -> Path:
+    return (base / Path(path).expanduser()).resolve()
 
 
 def load_settings(path: Path = ROOT / "config.yaml") -> Settings:
     settings = Settings.model_validate(read_yaml(path))
+    projects = {}
     for name, value in settings.projects.items():
         if not name or len(name) > 80:
             raise ValueError("Project names must contain 1..80 characters")
-        resolved = confined(value)
+        resolved = resolve_path(value, path.resolve().parent)
         if not resolved.is_dir():
             raise ValueError(f"Project {name!r} directory is missing: {resolved}")
+        projects[name] = str(resolved)
     if settings.server.port == settings.tunnel.health_port:
         raise ValueError("server.port and tunnel.health_port must differ")
-    return settings
+    return settings.model_copy(update={"projects": projects})
 
 
 def load_secrets() -> Secrets:

@@ -13,9 +13,9 @@ from typing import Any, Literal
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from bootstrap import ROOT, managed_python
+from bootstrap import managed_python
 from . import __version__
-from .config import confined
+from .config import resolve_path
 
 log = logging.getLogger(__name__)
 
@@ -26,15 +26,8 @@ class FileTools:
         self.lock = threading.RLock()
 
     def path(self, project: str, relative: str = ".") -> Path:
-        base = confined(self.configuration.current.projects[project])
-        if Path(relative).is_absolute():
-            raise ValueError("Use a path relative to the selected project")
-        target = (base / relative).resolve()
-        if not target.is_relative_to(base):
-            raise ValueError(f"Path escapes project {project!r}: {relative}")
-        if target == ROOT / "secrets.yaml" or target.is_relative_to(ROOT / "runtime"):
-            raise ValueError("Credentials and runtime records are private to the service")
-        return target
+        base = resolve_path(self.configuration.current.projects[project])
+        return resolve_path(relative, base)
 
     def read(self, project: str, path: str) -> bytes:
         target = self.path(project, path)
@@ -112,12 +105,12 @@ def create_mcp(configuration, jobs, get_status):
 
     @tool
     def list_projects() -> dict[str, Any]:
-        """List the exact project names and paths allowed by config.yaml."""
+        """List project names and resolved absolute working directories from config.yaml."""
         return {"projects": configuration.current.projects, "config_revision": configuration.revision}
 
     @tool
     def list_files(project: str, path: str = ".", limit: int = 200) -> dict[str, Any]:
-        """List one directory. Paths are relative to a configured project. limit: 1..1000."""
+        """List one directory using an absolute path or a path relative to the selected project. limit: 1..1000."""
         if not 1 <= limit <= 1000:
             raise ValueError("limit must be in 1..1000")
         directory = files.path(project, path)
@@ -176,6 +169,8 @@ def create_mcp(configuration, jobs, get_status):
             raise ValueError("text must be nonempty; limit must be in 1..1000")
         base = files.path(project)
         directory = files.path(project, path)
+        if not directory.is_dir():
+            raise NotADirectoryError(f"Search directory is missing or is not a directory: {directory}")
         matches, skipped, scanned = [], 0, 0
         excluded = {".git", ".cache", ".tmp", ".venv", "__pycache__", "node_modules", "runtime", "bin"}
         for current, directories, names in os.walk(directory, followlinks=False):
@@ -187,7 +182,7 @@ def create_mcp(configuration, jobs, get_status):
                 scanned += 1
                 if scanned > 10000:
                     return {"matches": matches, "truncated": True, "scan_limit": 10000, "skipped_files": skipped}
-                relative = target.relative_to(base).as_posix()
+                relative = target.relative_to(base).as_posix() if target.is_relative_to(base) else str(target)
                 if target.stat().st_size > configuration.current.files.max_bytes:
                     skipped += 1
                     continue
