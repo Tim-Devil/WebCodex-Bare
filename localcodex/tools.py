@@ -82,7 +82,7 @@ def create_mcp(configuration, jobs, get_status):
     import inspect
     import time
 
-    mcp = MCPServer("WebCodex Local", version=__version__, instructions=
+    mcp = MCPServer("WebCodex-Bare", version=__version__, instructions=
                     "Select a configured project. Read files before editing and pass the returned SHA-256. "
                     "run_process/run_python/git return job IDs; observe the same job with read_job. "
                     "Tool failures are explicit; inspect their cause before issuing another side effect. "

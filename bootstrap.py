@@ -116,7 +116,7 @@ def main(command: str, gui: bool = False) -> int:
             traceback.print_exc(file=stream)
         if gui and os.name == "nt":
             import ctypes
-            ctypes.windll.user32.MessageBoxW(None, f"{error}\n\nLog: {log}", "WebCodex Local", 0x10)
+            ctypes.windll.user32.MessageBoxW(None, f"{error}\n\nLog: {log}", "WebCodex-Bare", 0x10)
         else:
             traceback.print_exc()
         return 1

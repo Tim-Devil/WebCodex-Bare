@@ -1,10 +1,24 @@
-# WebCodex Local
+# WebCodex-Bare
 
-我不太喜欢给小工具加太多包装。我喜欢即开即关：用的时候点一下启动，用完点一下关闭。配置写清楚，出了问题能从日志里找到原因，这样就够了。
+[简体中文](#zh-cn) | [English](#en)
+
+<a id="zh-cn"></a>
+
+## 简体中文
+
+> 提醒：本工具以自用为主，因此测试可能有不及时的地方。有bug可以走issue或者PR，看到就会修（
+
+起因：我的Codex降智了。被迫营业。
+
+原则：我不太喜欢给小工具加太多包装。我喜欢即开即关：用的时候点一下启动，用完点一下关闭。配置写清楚，出了问题能从日志里找到原因，这样就够了。
 
 这个项目把本机文件、Git 和命令执行接到 MCP，让 ChatGPT 能操作指定的工作区。服务用 Python 写，隧道使用 OpenAI 官方的 `tunnel-client`。日常入口就是 `start.pyw` 和 `stop.pyw`。
 
-## 安装
+本项目的想法来源于 [yyjeqhc/webcodex](https://github.com/yyjeqhc/webcodex) ，在这里致谢。
+
+### 安装
+
+首先直接下载整个项目。直接源码运行。（有时间我会release一个zip，但没有本质区别）
 
 准备 Python 3.12 或更新版本。使用 Git 工具时，系统还需要安装 Git，并加入 `PATH`。安装过程会访问 PyPI 和 GitHub。
 
@@ -15,38 +29,45 @@ py -3 install.py
 copy secrets.example.yaml secrets.yaml
 ```
 
-打开 `secrets.yaml`，填入自己的 OpenAI MCP 隧道 ID 和 API key：
+安装程序会创建标准 `.venv`，安装 `requirements.txt` 中的依赖，并下载官方隧道客户端。下载内容按官方 `SHA256SUMS.txt` 校验，许可证和来源记录保存在 `bin/<平台>/`。环境、依赖缓存、下载临时文件和运行日志都放在项目目录里。
+
+Linux 的安装命令：
+
+```sh
+python3 install.py
+cp secrets.example.yaml secrets.yaml
+chmod 600 secrets.yaml
+chmod +x start stop
+```
+
+Windows 已完成实际验证。Linux 提供了启动脚本、文件锁和进程组处理，实际运行仍待验证。支持的 CPU 架构为 x86_64 和 ARM64；本机验证使用 Windows x86_64。
+
+### 获取隧道 ID 和 API key
+
+1. 登录 [OpenAI Platform 隧道设置](https://platform.openai.com/settings/organization/tunnels)，选择要使用的组织，创建隧道，复制完整的 `tunnel_...` ID。
+2. 在隧道设置中关联准备用来连接的 ChatGPT 工作区。
+3. 打开同一组织的 [API keys 页面](https://platform.openai.com/settings/organization/api-keys)，创建用于 `tunnel-client` 运行的 API key。
+
+创建隧道需要组织级 `Tunnels Read + Manage` 权限，运行隧道和在 ChatGPT 中选择隧道需要 `Tunnels Read + Use`。页面提示 `Tunnels access required` 时，请组织所有者或 RBAC 管理员授予相应权限。具体要求见 [OpenAI 官方隧道说明](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)。
+
+把隧道 ID 和运行用的 API key 填入 `secrets.yaml`：
 
 ```yaml
 tunnel_id: tunnel_你的隧道ID
 tunnel_api_key: 你的API密钥
 ```
 
-安装程序会创建标准 `.venv`，安装 `requirements.txt` 中的依赖，并下载官方隧道客户端。下载内容按官方 `SHA256SUMS.txt` 校验，许可证和来源记录保存在 `bin/<平台>/`。环境、依赖缓存、下载临时文件和运行日志都放在项目目录里。
-
-Linux 的安装和启停命令：
-
-```sh
-python3 install.py
-cp secrets.example.yaml secrets.yaml
-# 编辑 secrets.yaml，填入凭证。
-chmod 600 secrets.yaml
-chmod +x start stop
-./start
-./stop
-```
-
-Windows 已完成实际验证。Linux 提供了启动脚本、文件锁和进程组处理，实际运行仍待验证。支持的 CPU 架构为 x86_64 和 ARM64；本机验证使用 Windows x86_64。
-
-## 启动、连接、停止
+### 启动、连接、停止
 
 Windows 双击 `start.pyw`。启动程序会等待本地服务和隧道就绪，成功后退出。重复点击会检查并复用正在运行的实例。启动失败会弹窗，具体原因写入 `runtime/`。
 
-在 ChatGPT 的开发者模式中创建应用，连接方式选 Tunnel，填写 `secrets.yaml` 中的隧道 ID，认证选 `No authentication`。本地隧道客户端会为服务注入运行令牌。连接后调用 `list_projects`，应能看到配置中的项目。
+在 [ChatGPT Plugins](https://chatgpt.com/plugins) 中选择 `Add custom MCP server`，连接方式选 `Tunnel`，填写 `secrets.yaml` 中的隧道 ID，认证选 `No authentication`。本地隧道客户端会为服务注入运行令牌。连接后调用 `list_projects`，应能看到配置中的项目。添加权限由账户和工作区设置控制，入口说明见 [OpenAI 官方连接指南](https://developers.openai.com/plugins/deploy/connect-chatgpt)。
 
 升级后若工具列表仍显示旧内容，在应用设置里刷新工具列表，再开始新对话。
 
 用完双击 `stop.pyw`。停止程序会等待服务退出，并结束服务管理的任务、子进程和隧道连接。项目文件和日志会保留。
+
+Linux 使用 `./start` 启动，使用 `./stop` 停止。
 
 命令行也可以查看状态或启停：
 
@@ -58,7 +79,7 @@ python bootstrap.py stop
 
 本地 MCP 地址默认是 `http://127.0.0.1:8765/mcp`，采用 Bearer 认证。直接连接本地服务时，令牌取自 `runtime/instance.yaml`，每次启动重新生成。
 
-## 添加工作区
+### 添加工作区
 
 把项目放进程序目录内，例如创建 `projects/demo/`，然后修改 `config.yaml`：
 
@@ -72,7 +93,7 @@ projects:
 
 文件工具会校验项目路径。命令使用当前账户的权限执行，以所选项目作为工作目录。`run_python` 使用本项目的 `.venv`。
 
-## 配置和热加载
+### 配置和热加载
 
 运行配置放在 `config.yaml`，隧道凭证放在 `secrets.yaml`。Python 依赖由 `requirements.txt` 管理。
 
@@ -81,13 +102,13 @@ projects:
 | `projects`、`files` | 校验通过后，后续工具调用使用新配置 |
 | `jobs` | 新任务使用新限制，已有任务沿用启动时的限制 |
 | `logging.level`、`reload_seconds` | 校验通过后生效 |
-| `server`、`tunnel`、日志轮转大小与数量 | 服务报错并停止，重新启动后应用新配置 |
+| `server`、`tunnel`、日志轮转大小与数量 | 服务报错并停止，重新启动后应用新配置            |
 | `secrets.yaml` | 服务停止，重新启动后使用新凭证 |
 | `requirements.txt` | 服务停止，执行 `python install.py` 后重新启动 |
 
 YAML 格式错误、重复字段、未知字段和无效参数会明确报错。热加载失败时服务停止，错误原因写入日志。修改依赖前请先停止服务。
 
-## 工具
+### 工具
 
 | 用途 | 工具 |
 | --- | --- |
@@ -101,13 +122,13 @@ YAML 格式错误、重复字段、未知字段和无效参数会明确报错。
 
 命令工具接收参数数组并返回任务编号，通过 `read_job` 查看状态和输出。任务终态包括成功、失败、超时、取消和中断。服务重启时，上次遗留的运行中任务会标记为中断。PowerShell 命令会被拒绝。
 
-## 日志和目录
+### 日志和目录
 
 | 路径 | 内容 |
 | --- | --- |
 | `runtime/service.log` | 服务状态、配置加载、工具调用和异常堆栈 |
 | `runtime/launcher.log`、`runtime/console.log` | 启停入口和启动异常 |
-| `runtime/tunnel.log`、`runtime/tunnel-console.log` | 官方隧道客户端日志 |
+| `runtime/tunnel.log`、`runtime/tunnel-console.log` | 官方隧道客户端日志                     |
 | `runtime/jobs/` | 各任务的状态、输入和输出 |
 | `.venv/`、`bin/` | 本地 Python 环境和官方隧道程序 |
 | `.cache/`、`.tmp/` | 依赖缓存和临时文件 |
@@ -115,8 +136,150 @@ YAML 格式错误、重复字段、未知字段和无效参数会明确报错。
 
 这些运行目录以及 `secrets.yaml` 已加入 `.gitignore`。仓库只提供凭证示例。
 
-## 来源与许可
+### 许可与第三方组件
 
-想法来自 [yyjeqhc/webcodex](https://github.com/yyjeqhc/webcodex)。本项目独立实现了 Python 服务、配置、启停和任务管理；隧道组件来自 [OpenAI 官方 tunnel-client](https://github.com/openai/tunnel-client)，固定使用 `v0.0.19`。
+本项目独立实现了 Python 服务、配置、启停和任务管理；隧道组件来自 [OpenAI 官方 tunnel-client](https://github.com/openai/tunnel-client)，固定使用 `v0.0.19`。
 
 本项目采用 [MIT License](LICENSE)。第三方组件的信息见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+
+---
+
+<a id="en"></a>
+
+## English
+
+> A heads-up: this is mainly a personal tool, so testing may lag behind. Report bugs through issues or PRs; I'll fix them when I see them :)
+
+Why this exists: my Codex started acting dumb. So I got to work.
+
+The idea is simple: I like small tools that I can start when I need them and shut down when I'm done. Keep the configuration clear and put enough detail in the logs to explain what went wrong. That's enough for me.
+
+This project exposes local files, Git, and command execution through MCP so ChatGPT can work with selected workspaces on your machine. The service is written in Python, and the tunnel uses OpenAI's official `tunnel-client`. Day to day, you use `start.pyw` and `stop.pyw`.
+
+The idea came from [yyjeqhc/webcodex](https://github.com/yyjeqhc/webcodex). Thanks for the inspiration.
+
+### Installation
+
+Download and extract the source, then run it from the project directory. (I'll put together a release ZIP when I have time; it'll run the same way.)
+
+Install Python 3.12 or newer. The Git tool also needs Git installed and available on `PATH`. Installation accesses PyPI and GitHub.
+
+On Windows, open Command Prompt in the project directory and run:
+
+```bat
+py -3 install.py
+copy secrets.example.yaml secrets.yaml
+```
+
+The installer creates a standard `.venv`, installs the dependencies in `requirements.txt`, and downloads the official tunnel client. It verifies the download against the official `SHA256SUMS.txt` and saves its license and provenance under `bin/<platform>/`. The environment, dependency caches, temporary downloads, and runtime logs stay inside the project directory.
+
+On Linux:
+
+```sh
+python3 install.py
+cp secrets.example.yaml secrets.yaml
+chmod 600 secrets.yaml
+chmod +x start stop
+```
+
+Windows has been tested on a real machine. Linux has launch scripts, file locking, and process-group handling; testing on a Linux machine is still pending. The installer supports x86_64 and ARM64. Local testing used Windows x86_64.
+
+### Get a tunnel ID and API key
+
+1. Sign in to [OpenAI Platform tunnel settings](https://platform.openai.com/settings/organization/tunnels), select your organization, create a tunnel, and copy its full `tunnel_...` ID.
+2. Associate the tunnel with the ChatGPT workspace you plan to use.
+3. Open the same organization's [API keys page](https://platform.openai.com/settings/organization/api-keys) and create an API key for running `tunnel-client`.
+
+Creating tunnels requires organization-level `Tunnels Read + Manage`; running the client and selecting a tunnel in ChatGPT requires `Tunnels Read + Use`. If the page shows `Tunnels access required`, ask an organization owner or RBAC administrator for the required permissions. See the [official OpenAI tunnel guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels).
+
+Put the tunnel ID and runtime API key in `secrets.yaml`:
+
+```yaml
+tunnel_id: tunnel_YOUR_TUNNEL_ID
+tunnel_api_key: YOUR_API_KEY
+```
+
+### Start, connect, and stop
+
+On Windows, double-click `start.pyw`. The launcher waits for the local service and tunnel to become ready, then exits. Starting it again checks and reuses the running instance. Startup failures appear in a dialog, with details under `runtime/`.
+
+In [ChatGPT Plugins](https://chatgpt.com/plugins), choose `Add custom MCP server`, select `Tunnel` as the connection type, enter the tunnel ID from `secrets.yaml`, and choose `No authentication`. The local tunnel client injects the service's runtime token. After connecting, call `list_projects` to check the configured projects. Access to custom MCP servers depends on your account and workspace settings; see the [official OpenAI connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt).
+
+If an upgrade leaves the old tool list visible, refresh the tools in the app settings and start a new conversation.
+
+When you're done, double-click `stop.pyw`. It waits for the service to exit and ends its managed jobs, child processes, and tunnel connection. Project files and logs are kept.
+
+On Linux, use `./start` and `./stop`.
+
+You can also check status or control the service from a terminal:
+
+```sh
+python bootstrap.py status
+python bootstrap.py start
+python bootstrap.py stop
+```
+
+The local MCP endpoint defaults to `http://127.0.0.1:8765/mcp` and uses Bearer authentication. A client connecting directly to this endpoint needs the token from `runtime/instance.yaml`. A new token is generated on each start.
+
+### Add a workspace
+
+Place the project inside the application directory, for example at `projects/demo/`, then edit `config.yaml`:
+
+```yaml
+projects:
+  workspace: ./workspace
+  demo: ./projects/demo
+```
+
+Create the directory first. Paths are relative to the application directory. Changes load within one second by default; call `list_projects` to see `demo`.
+
+File tools validate project paths. Commands run with your account's permissions and use the selected project as their working directory. `run_python` uses this project's `.venv`.
+
+### Configuration and hot reload
+
+Runtime settings live in `config.yaml`, tunnel credentials in `secrets.yaml`, and Python dependencies in `requirements.txt`.
+
+| Change | Behavior |
+| --- | --- |
+| `projects`, `files` | Subsequent tool calls use the validated settings |
+| `jobs` | New jobs use the new limits; running jobs keep their original limits |
+| `logging.level`, `reload_seconds` | Applied after validation |
+| `server`, `tunnel`, log rotation size or count | The service reports the change and stops; start it again to apply it |
+| `secrets.yaml` | The service stops; start it again to use the new credentials |
+| `requirements.txt` | The service stops; run `python install.py`, then start it again |
+
+Malformed YAML, duplicate keys, unknown fields, and invalid values produce explicit errors. A failed reload stops the service and logs the cause. Stop the service before changing dependencies.
+
+### Tools
+
+| Purpose | Tools |
+| --- | --- |
+| Service and projects | `get_status_tool`, `list_projects` |
+| Browse and search | `list_files`, `read_file`, `search_text` |
+| Create and edit | `write_file`, `replace_text` |
+| Background execution | `run_process`, `run_python`, `git` |
+| Job management | `read_job`, `list_jobs`, `cancel_job` |
+
+Before editing an existing file, read it and pass the returned full-file SHA-256. Use `next_offset` to continue reading a large file or job output. Binary files support `base64`.
+
+Command tools accept argument arrays and return a job ID. Use `read_job` to check status and output. Terminal states are `succeeded`, `failed`, `timed_out`, `cancelled`, and `interrupted`. On restart, unfinished jobs from the previous service instance are marked `interrupted`. PowerShell commands are rejected.
+
+### Logs and directories
+
+| Path | Contents |
+| --- | --- |
+| `runtime/service.log` | Service state, configuration reloads, tool calls, and exception tracebacks |
+| `runtime/launcher.log`, `runtime/console.log` | Launcher output and startup failures |
+| `runtime/tunnel.log`, `runtime/tunnel-console.log` | Official tunnel client logs |
+| `runtime/jobs/` | Job status, input, and output |
+| `.venv/`, `bin/` | Local Python environment and official tunnel executable |
+| `.cache/`, `.tmp/` | Dependency caches and temporary files |
+| `workspace/`, `projects/` | Local workspaces |
+
+These runtime directories and `secrets.yaml` are covered by `.gitignore`. The repository includes example credentials only.
+
+### License and third-party components
+
+The Python service, configuration, lifecycle, and job management are independently implemented. The tunnel component comes from [OpenAI's official tunnel-client](https://github.com/openai/tunnel-client), pinned to `v0.0.19`.
+
+This project uses the [MIT License](LICENSE). Third-party details are in [THIRD_PARTY.md](THIRD_PARTY.md).
