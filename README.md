@@ -144,6 +144,10 @@ YAML 格式错误、重复字段、未知字段和无效参数会明确报错。
 
 ChatGPT 可能缓存了旧的工具定义，更新程序后仍按旧列表调用工具。请在应用设置中点击 `Refresh`，刷新工具列表，再新建对话、选择该应用，并调用 `list_projects` 验证。
 
+### 友链与致谢
+
+感谢 [LINUX DO](https://linux.do) 社区，我是在这里了解到 WebCodex 的，也因此有了这个项目。
+
 ### 许可与第三方组件
 
 本项目独立实现了 Python 服务、配置、启停和任务管理；隧道组件来自 [OpenAI 官方 tunnel-client](https://github.com/openai/tunnel-client)，固定使用 `v0.0.19`。
@@ -293,6 +297,10 @@ These runtime directories and `secrets.yaml` are covered by `.gitignore`. The re
 #### Q1: The program is running and ChatGPT is connected. Why do tool calls still fail?
 
 ChatGPT may have cached the old tool definitions and may still use them after an update. Open the app settings and click `Refresh`, then start a new conversation, select the app, and call `list_projects` to verify the connection.
+
+### Community and thanks
+
+Thanks to the [LINUX DO](https://linux.do) community, where I discovered WebCodex and got the inspiration for this project.
 
 ### License and third-party components
 
